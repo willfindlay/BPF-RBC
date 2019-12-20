@@ -10,7 +10,7 @@ EPILOG="""
 """
 
 def main(args):
-    bpf = BPFProgram()
+    bpf = BPFProgram(args)
     bpf.main()
 
 def is_root():
@@ -19,7 +19,8 @@ def is_root():
 def parse_args(args=sys.argv[1:]):
     parser = ArgumentParser(prog="bpf-rbc", description=DESCRIPTION, epilog=EPILOG)
 
-    # Arguments here
+    # For testing only, delete later
+    parser.add_argument('executable', type=lambda x: os.path.realpath(x))
 
     args = parser.parse_args(args)
 
