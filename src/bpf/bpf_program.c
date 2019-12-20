@@ -2,6 +2,13 @@
 
 #include <linux/sched.h>
 
+static inline u32 bpf_strlen(char *s)
+{
+    u32 i;
+    for (i = 0; s[i] != '\0' && i < (1 << (32 - 1)); i++);
+    return i;
+}
+
 static inline int bpf_strncmp(char *s1, char *s2, u32 n)
 {
     int mismatch = 0;
@@ -33,10 +40,10 @@ RAW_TRACEPOINT_PROBE(mm_lru_insertion)
 
     struct page *p = (struct page *)ctx->args[0];
 
-    if (bpf_strncmp(comm, EXECUTABLE, TASK_COMM_LEN))
+    if (bpf_strncmp(comm, "ls", TASK_COMM_LEN))
         return 0;
 
-    bpf_trace_printk("%s\n", comm);
+    bpf_trace_printk("%s %d\n", comm, bpf_strlen(EXECUTABLE));
 
     return 0;
 }
