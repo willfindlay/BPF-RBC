@@ -1,6 +1,7 @@
 /* https://github.com/torvalds/linux/tree/master/include/trace/events */
 
 #include <linux/sched.h>
+#include "src/bpf/bpf_program.h"
 
 static inline u32 bpf_strlen(char *s)
 {
@@ -32,18 +33,26 @@ static inline int bpf_strcmp(char *s1, char *s2)
     return bpf_strncmp(s1, s2, s1_size < s2_size ? s1_size : s2_size);
 }
 
-RAW_TRACEPOINT_PROBE(mm_lru_insertion)
+RAW_TRACEPOINT_PROBE(sys_enter)
 {
     struct task *t = (struct task *)bpf_get_current_task();
     char comm[TASK_COMM_LEN];
     bpf_get_current_comm(comm, TASK_COMM_LEN);
 
-    struct page *p = (struct page *)ctx->args[0];
-
-    if (bpf_strncmp(comm, "ls", TASK_COMM_LEN))
+    if (bpf_strncmp(comm, EXECUTABLE, TASK_COMM_LEN))
         return 0;
 
-    bpf_trace_printk("%s %d\n", comm, bpf_strlen(EXECUTABLE));
+    struct pt_regs *regs = (struct pt_regs *) ctx->args[0];
+    unsigned long bp = regs->sp; /* Base pointer */
+    unsigned long sp = regs->si; /* Stack frame pointer */
+    unsigned long ip = regs->ip; /* Instruction pointer */
+
+    bpf_trace_printk("%x %x %x\n", bp, sp, ip);
 
     return 0;
+}
+
+RAW_TRACEPOINT_PROBE(sys_exit)
+{
+
 }
