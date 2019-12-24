@@ -48,32 +48,7 @@ static int store_intermediate_values(void)
     return 0;
 }
 
-//RAW_TRACEPOINT_PROBE(sys_enter)
-//{
-//    struct task_struct *t = (struct task_struct *)bpf_get_current_task();
-//    char comm[TASK_COMM_LEN];
-//    bpf_get_current_comm(comm, TASK_COMM_LEN);
-//
-//    /* Check if we are in the specified comm */
-//    if (bpf_strncmp(comm, EXECUTABLE, TASK_COMM_LEN))
-//        return 0;
-//
-//    struct pt_regs *regs = (struct pt_regs *)ctx->args[0];
-//    unsigned long bp = regs->bp; /* Base pointer */
-//    unsigned long sp = regs->sp; /* Stack frame pointer */
-//    unsigned long ip = regs->ip; /* Instruction pointer */
-//
-//    struct mm_struct *mm = (struct mm_struct *) t->mm;
-//    unsigned long end_stack = sp;
-//    unsigned long start_stack = mm->start_stack;
-//
-//    //bpf_trace_printk("syscall: %lu rbp: %x rsp: %x\n", ctx->args[1], bp, sp);
-//    bpf_trace_printk("syscall: %lu\n", ctx->args[1]);
-//    bpf_trace_printk("stack start: %x stack end: %x stack size: %lu\n", start_stack, end_stack, (start_stack - end_stack));
-//
-//    return 0;
-//}
-TRACEPOINT_PROBE(kmem, mm_page_alloc)
+int kprobe__expand_stack(struct pt_regs *ctx, struct vm_area_struct *vma, unsigned long addr)
 {
     struct task_struct *t = (struct task_struct *)bpf_get_current_task();
     char comm[TASK_COMM_LEN];
@@ -83,35 +58,68 @@ TRACEPOINT_PROBE(kmem, mm_page_alloc)
     if (bpf_strncmp(comm, EXECUTABLE, TASK_COMM_LEN))
         return 0;
 
-    struct pt_regs *regs = bpf_get_current_pt_regs();
-    unsigned long bp = regs->bp; /* Base pointer */
-    unsigned long sp = regs->sp; /* Stack frame pointer */
-    unsigned long ip = regs->ip; /* Instruction pointer */
-
     struct mm_struct *mm = (struct mm_struct *) t->mm;
-    unsigned long end_stack = sp;
-    unsigned long start_stack = mm->start_stack;
 
-    //bpf_trace_printk("syscall: %lu rbp: %x rsp: %x\n", ctx->args[1], bp, sp);
-    //bpf_trace_printk("syscall: %lu\n", ctx->args[1]);
-    bpf_trace_printk("stack start: %x stack end: %x stack size: %lu\n", start_stack, end_stack, (start_stack - end_stack));
-    bpf_trace_printk("stack start: %x\n", start_stack);
+    bpf_trace_printk("Expanding stack...\n");
+    bpf_trace_printk("stack start: %x\n", mm->start_stack);
+    bpf_trace_printk("stack end: %x\n", mm->start_stack + mm->stack_vm);
+    bpf_trace_printk("stack size: %lu bytes\n", mm->stack_vm * PAGE_SIZE);
+    bpf_trace_printk("--------------------------\n");
     return 0;
 }
-//
-// RAW_TRACEPOINT_PROBE(sys_exit)
-// {
-//     struct task *t = (struct task *)bpf_get_current_task();
-//     char comm[TASK_COMM_LEN];
-//     bpf_get_current_comm(comm, TASK_COMM_LEN);
-//
-//     if (bpf_strncmp(comm, EXECUTABLE, TASK_COMM_LEN))
-//         return 0;
-//
-//     struct pt_regs *regs = (struct pt_regs *) ctx->args[0];
-//     unsigned long bp = regs->sp; /* Base pointer */
-//     unsigned long sp = regs->si; /* Stack frame pointer */
-//     unsigned long ip = regs->ip; /* Instruction pointer */
-//
-//     return 0;
-// }
+
+int kretprobe__expand_stack(struct pt_regs *ctx)
+{
+    struct task_struct *t = (struct task_struct *)bpf_get_current_task();
+    char comm[TASK_COMM_LEN];
+    bpf_get_current_comm(comm, TASK_COMM_LEN);
+
+    /* Check if we are in the specified comm */
+    if (bpf_strncmp(comm, EXECUTABLE, TASK_COMM_LEN))
+        return 0;
+
+    struct mm_struct *mm = (struct mm_struct *) t->mm;
+    unsigned long start_stack = mm->start_stack;
+
+    if(PT_REGS_RC(ctx))
+    {
+        bpf_trace_printk("Couldn't expand stack!\n");
+        return 0;
+    }
+
+    bpf_trace_printk("stack start: %x\n", mm->start_stack);
+    bpf_trace_printk("stack end: %x\n", mm->start_stack + mm->stack_vm * PAGE_SIZE);
+    bpf_trace_printk("stack size: %lu bytes\n", mm->stack_vm * PAGE_SIZE);
+    bpf_trace_printk("Expanded stack!\n");
+
+
+    return 0;
+}
+
+int kprobe__vm_brk(struct pt_regs *ctx)
+{
+    struct task_struct *t = (struct task_struct *)bpf_get_current_task();
+    char comm[TASK_COMM_LEN];
+    bpf_get_current_comm(comm, TASK_COMM_LEN);
+
+    /* Check if we are in the specified comm */
+    if (bpf_strncmp(comm, EXECUTABLE, TASK_COMM_LEN))
+        return 0;
+
+    struct mm_struct *mm = (struct mm_struct *) t->mm;
+    unsigned long start_stack = mm->start_stack;
+
+    //if(PT_REGS_RC(ctx))
+    //{
+    //    bpf_trace_printk("Couldn't expand heap!\n");
+    //    return 0;
+    //}
+
+    bpf_trace_printk("heap start: %x\n", mm->start_brk);
+    bpf_trace_printk("heap end: %x\n", mm->brk);
+    bpf_trace_printk("heap size: %lu bytes\n", mm->brk - mm->start_brk);
+    bpf_trace_printk("Expanded heap!\n");
+
+
+    return 0;
+}
