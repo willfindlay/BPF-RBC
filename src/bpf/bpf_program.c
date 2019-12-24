@@ -4,6 +4,14 @@
 #include <linux/mm_types.h>
 #include "src/bpf/bpf_program.h"
 
+static inline struct pt_regs *bpf_get_current_pt_regs()
+{
+    struct task_struct* __current = (struct task_struct*)bpf_get_current_task();
+    void* __current_stack_page = __current->stack;
+    void* __ptr = __current_stack_page + THREAD_SIZE - TOP_OF_KERNEL_STACK_PADDING;
+    return ((struct pt_regs *)__ptr) - 1;
+}
+
 static inline u32 bpf_strlen(char *s)
 {
     u32 i;
@@ -40,7 +48,32 @@ static int store_intermediate_values(void)
     return 0;
 }
 
-RAW_TRACEPOINT_PROBE(sys_enter)
+//RAW_TRACEPOINT_PROBE(sys_enter)
+//{
+//    struct task_struct *t = (struct task_struct *)bpf_get_current_task();
+//    char comm[TASK_COMM_LEN];
+//    bpf_get_current_comm(comm, TASK_COMM_LEN);
+//
+//    /* Check if we are in the specified comm */
+//    if (bpf_strncmp(comm, EXECUTABLE, TASK_COMM_LEN))
+//        return 0;
+//
+//    struct pt_regs *regs = (struct pt_regs *)ctx->args[0];
+//    unsigned long bp = regs->bp; /* Base pointer */
+//    unsigned long sp = regs->sp; /* Stack frame pointer */
+//    unsigned long ip = regs->ip; /* Instruction pointer */
+//
+//    struct mm_struct *mm = (struct mm_struct *) t->mm;
+//    unsigned long end_stack = sp;
+//    unsigned long start_stack = mm->start_stack;
+//
+//    //bpf_trace_printk("syscall: %lu rbp: %x rsp: %x\n", ctx->args[1], bp, sp);
+//    bpf_trace_printk("syscall: %lu\n", ctx->args[1]);
+//    bpf_trace_printk("stack start: %x stack end: %x stack size: %lu\n", start_stack, end_stack, (start_stack - end_stack));
+//
+//    return 0;
+//}
+TRACEPOINT_PROBE(kmem, mm_page_alloc)
 {
     struct task_struct *t = (struct task_struct *)bpf_get_current_task();
     char comm[TASK_COMM_LEN];
@@ -50,15 +83,19 @@ RAW_TRACEPOINT_PROBE(sys_enter)
     if (bpf_strncmp(comm, EXECUTABLE, TASK_COMM_LEN))
         return 0;
 
-    // struct pt_regs *regs = (struct pt_regs *) ctx->args[0];
-    // unsigned long bp = regs->sp; /* Base pointer */
-    // unsigned long sp = regs->si; /* Stack frame pointer */
-    // unsigned long ip = regs->ip; /* Instruction pointer */
+    struct pt_regs *regs = bpf_get_current_pt_regs();
+    unsigned long bp = regs->bp; /* Base pointer */
+    unsigned long sp = regs->sp; /* Stack frame pointer */
+    unsigned long ip = regs->ip; /* Instruction pointer */
 
     struct mm_struct *mm = (struct mm_struct *) t->mm;
+    unsigned long end_stack = sp;
+    unsigned long start_stack = mm->start_stack;
 
-    bpf_trace_printk("hello VM areas %d\n", mm->map_count);
-
+    //bpf_trace_printk("syscall: %lu rbp: %x rsp: %x\n", ctx->args[1], bp, sp);
+    //bpf_trace_printk("syscall: %lu\n", ctx->args[1]);
+    bpf_trace_printk("stack start: %x stack end: %x stack size: %lu\n", start_stack, end_stack, (start_stack - end_stack));
+    bpf_trace_printk("stack start: %x\n", start_stack);
     return 0;
 }
 //
