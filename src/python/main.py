@@ -4,6 +4,8 @@ from argparse import ArgumentParser
 from bpf_program import BPFProgram
 
 DESCRIPTION="""
+System-wide runtime bounds checking with eBPF... eventually.
+Right now, it just shows stack allocations. Which is kind of cool I guess.
 """
 
 EPILOG="""
