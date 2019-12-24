@@ -19,8 +19,12 @@ def is_root():
 def parse_args(args=sys.argv[1:]):
     parser = ArgumentParser(prog="bpf-rbc", description=DESCRIPTION, epilog=EPILOG)
 
-    # For testing only, delete later
-    parser.add_argument('executable', type=lambda x: os.path.realpath(x))
+    # Filter by a specific comm
+    parser.add_argument("--comm", type=str,
+            help="Only trace programs that begin with <COMM>.")
+    # Print debug info
+    parser.add_argument("--debug", action="store_true",
+            help="Print debugging info.")
 
     args = parser.parse_args(args)
 

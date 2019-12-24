@@ -9,9 +9,9 @@ from defs import project_path
 class BPFProgram():
     def __init__(self, args):
         self.bpf = None
-        self.register_exit_hooks()
 
-        self.executable = args.executable
+        self.comm = args.comm
+        self.debug = args.debug
 
     def register_exit_hooks(self):
         # Catch signals so we still invoke atexit
@@ -28,12 +28,25 @@ class BPFProgram():
 
     def load_bpf(self):
         assert self.bpf == None
+
+        # Set flags
+        flags = []
+        if self.comm:
+            flags.append(f'-DRBC_COMM="{self.comm}"')
+        if self.debug:
+            flags.append(f'-DRBC_DEBUG')
+
         with open(os.path.join(project_path, "src/bpf/bpf_program.c"), "r") as f:
             text = f.read()
-            self.bpf = BPF(text=text, cflags=[f'-DEXECUTABLE="{os.path.basename(os.path.normpath(self.executable))}"'])
+            self.bpf = BPF(text=text, cflags=flags)
+        self.register_exit_hooks()
 
     def main(self):
         self.load_bpf()
 
+        #for v in self.bpf["rbc_tasks"].itervalues():
+        #    print(v.comm)
+
         while True:
-            self.bpf.trace_print()
+            if self.debug:
+                self.bpf.trace_print()
