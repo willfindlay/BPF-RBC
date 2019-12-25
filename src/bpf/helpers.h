@@ -41,4 +41,15 @@ static inline int bpf_strcmp(char *s1, char *s2)
     return bpf_strncmp(s1, s2, s1_size < s2_size ? s1_size : s2_size);
 }
 
+/* Check if we are in the specified comm */
+#ifdef RBC_COMM
+#define RBC_FILTER_BY_COMM \
+    char comm[TASK_COMM_LEN]; \
+    bpf_get_current_comm(comm, TASK_COMM_LEN); \
+    if (bpf_strncmp(comm, RBC_COMM, TASK_COMM_LEN)) \
+        return 0;
+#else
+#define RBC_FILTER_BY_COMM
+#endif
+
 #endif /* HELPERS_H */

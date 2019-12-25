@@ -48,8 +48,8 @@ update:
     rbc_task->tgid = pid_tgid;
     rbc_task->stack_start = mm->start_stack;
     rbc_task->stack_end = mm->start_stack - mm->stack_vm * PAGE_SIZE; /* TODO: change this to + based on STACKGROWSUP */
-    //rbc_task->heap_start = mm->mmap_base;
-    //rbc_task->heap_end = mm->task_size;
+    rbc_task->heap_start = mm->start_brk;
+    rbc_task->heap_end = mm->brk;
     bpf_get_current_comm(rbc_task->comm, TASK_COMM_LEN);
 
     /* Maybe print debug info */
@@ -61,8 +61,8 @@ update:
     bpf_trace_printk("Stack start: %x\n", rbc_task->stack_start);
     bpf_trace_printk("Stack end:   %x\n", rbc_task->stack_end);
     bpf_trace_printk("Stack size:  %lu bytes\n", rbc_task->stack_start - rbc_task->stack_end);
-    //bpf_trace_printk("Heap start:  %x\n", rbc_task->heap_start);
-    //bpf_trace_printk("Heap end:    %x\n", rbc_task->heap_end);
+    bpf_trace_printk("Heap start:  %x\n", rbc_task->heap_start);
+    bpf_trace_printk("Heap end:    %x\n", rbc_task->heap_end);
     bpf_trace_printk("-------------------------------\n");
 #endif
 
@@ -71,15 +71,39 @@ update:
 
 /* BPF programs below this line ---------------------------------- */
 
+TRACEPOINT_PROBE(raw_syscalls, sys_enter)
+{
+    RBC_FILTER_BY_COMM
+
+    return 0;
+}
+
+TRACEPOINT_PROBE(raw_syscalls, sys_exit)
+{
+    RBC_FILTER_BY_COMM
+
+    if (args->id == __NR_brk)
+    {
+#ifdef RBC_DEBUG
+    bpf_trace_printk("brk called!\n");
+#endif
+        struct rbc_task *r = update_rbc_task();
+    }
+
+    if (args->id == __NR_mmap)
+    {
+#ifdef RBC_DEBUG
+    bpf_trace_printk("mmap called!\n");
+#endif
+        struct rbc_task *r = update_rbc_task();
+    }
+
+    return 0;
+}
+
 int kprobe__expand_stack(struct pt_regs *ctx, struct vm_area_struct *vma, unsigned long addr)
 {
-#ifdef RBC_COMM
-    char comm[TASK_COMM_LEN];
-    bpf_get_current_comm(comm, TASK_COMM_LEN);
-    /* Check if we are in the specified comm */
-    if (bpf_strncmp(comm, RBC_COMM, TASK_COMM_LEN))
-        return 0;
-#endif
+    RBC_FILTER_BY_COMM
 
 #ifdef RBC_DEBUG
     bpf_trace_printk("Expanding stack...\n");
@@ -92,13 +116,7 @@ int kprobe__expand_stack(struct pt_regs *ctx, struct vm_area_struct *vma, unsign
 
 int kretprobe__expand_stack(struct pt_regs *ctx)
 {
-#ifdef RBC_COMM
-    char comm[TASK_COMM_LEN];
-    bpf_get_current_comm(comm, TASK_COMM_LEN);
-    /* Check if we are in the specified comm */
-    if (bpf_strncmp(comm, RBC_COMM, TASK_COMM_LEN))
-        return 0;
-#endif
+    RBC_FILTER_BY_COMM
 
     /* Check if there was an error expanding the stack */
     if(PT_REGS_RC(ctx))
