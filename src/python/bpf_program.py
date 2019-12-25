@@ -1,6 +1,7 @@
 import os, sys
 import atexit
 import signal
+import time
 
 from bcc import BPF
 
@@ -48,5 +49,6 @@ class BPFProgram():
         #    print(v.comm)
 
         while True:
+            time.sleep(1)
             if self.debug:
                 self.bpf.trace_print()

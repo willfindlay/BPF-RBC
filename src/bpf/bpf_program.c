@@ -7,16 +7,23 @@
 BPF_ARRAY(__rbc_task_init, struct rbc_task, 1);
 
 /* Hashmaps */
-BPF_HASH(rbc_tasks, u64, struct rbc_task); /* pid_tgid to rbc_task */
+BPF_TABLE("lru_hash", u64, struct rbc_task, rbc_tasks, 10240); /* pid_tgid to rbc_task */
 
 static inline struct rbc_task *update_rbc_task()
 {
     int zero = 0;
     u64 pid_tgid = bpf_get_current_pid_tgid();
     struct task_struct *t = (struct task_struct *)bpf_get_current_task();
+    struct rbc_task *rbc_task;
+    struct mm_struct *mm;
 
-    /* Lookup or init rbc_task */
-    struct rbc_task *rbc_task = __rbc_task_init.lookup(&zero);
+    /* Attempt to look up directly */
+    rbc_task = rbc_tasks.lookup(&pid_tgid);
+    if (rbc_task)
+        goto update;
+
+    /* Look up or init rbc_task */
+    rbc_task = __rbc_task_init.lookup(&zero);
     if (!rbc_task)
     {
 #ifdef RBC_DEBUG
@@ -33,8 +40,9 @@ static inline struct rbc_task *update_rbc_task()
         return NULL;
     }
 
+update:
     /* Get current memory descriptor */
-    struct mm_struct *mm = (struct mm_struct *) t->mm;
+    mm = (struct mm_struct *) t->mm;
 
     rbc_task->pid = (pid_tgid >> 32);
     rbc_task->tgid = pid_tgid;
